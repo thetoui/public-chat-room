@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ห้องแชทสาธารณะ (Public Chat)</title>
+    <link rel="stylesheet" href="/style.css">
+    <style>
+        /* ซ่อน scrollbar แต่ยังเลื่อนได้ */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        /* ป้องกันภาพล้นขอบ */
+        .chat-image {
+            max-height: 250px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-[100dvh] flex flex-col font-sans overflow-hidden text-gray-800">
+
+    <!-- ================= หน้าเข้าสู่ระบบ ================= -->
+    <div id="loginView" class="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-blue-500 to-purple-600 transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+            <div class="w-20 h-20 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">ยินดีต้อนรับสู่ห้องแชท</h1>
+            <p class="text-gray-500 text-sm mb-6">พูดคุยแบบเรียลไทม์ผ่าน WebSocket</p>
+            <form id="loginForm" class="space-y-4">
+                <input type="text" id="usernameInput" required placeholder="ตั้งชื่อเล่นของคุณ..." maxlength="20" class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition">
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 transform hover:scale-[1.02]">
+                    เข้าร่วมแชทเลย
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ================= หน้าแชทหลัก ================= -->
+    <div id="chatView" class="hidden flex-1 flex-col h-full relative">
+        
+        <!-- Header -->
+        <header class="bg-white shadow-sm z-10 px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-gradient-to-tr from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold" id="headerAvatar">?</div>
+                <div>
+                    <h2 class="font-bold text-gray-800 text-sm md:text-base flex items-center gap-2">
+                        <span id="displayUsername">ผู้ใช้งาน</span>
+                        <button onclick="editUsername()" class="text-gray-400 hover:text-blue-500 transition" title="แก้ไขชื่อ">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                    </h2>
+                    <div class="text-xs text-green-500 flex items-center gap-1">
+                        <span class="w-2 h-2 bg-green-500 rounded-full inline-block"></span> ออนไลน์ (WebSocket)
+                    </div>
+                </div>
+            </div>
+            <button onclick="logout()" class="text-gray-500 hover:text-red-500 bg-gray-100 hover:bg-red-50 p-2 rounded-full transition" title="ออกจากระบบ">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+            </button>
+        </header>
+
+        <!-- พื้นที่แสดงข้อความแชท -->
+        <main id="messageContainer" class="flex-1 overflow-y-auto p-4 space-y-4 bg-[#e5ddd5] no-scrollbar pb-20">
+            <!-- ข้อความจะถูกเพิ่มที่นี่ผ่าน JavaScript -->
+        </main>
+
+        <!-- พื้นที่สถานะกำลังตอบกลับ / พรีวิวรูปภาพ -->
+        <div id="attachmentPreviewArea" class="hidden absolute bottom-[72px] left-0 w-full bg-white border-t border-gray-200 p-2 px-4 shadow-lg z-20 flex-col gap-2">
+            
+            <!-- ส่วนตอบกลับ -->
+            <div id="replyPreview" class="hidden flex justify-between items-center bg-gray-50 p-2 rounded-lg border-l-4 border-blue-500">
+                <div class="overflow-hidden flex-1">
+                    <p class="text-xs font-bold text-blue-600 mb-0.5" id="replyPreviewName">ตอบกลับ: ชื่อ</p>
+                    <p class="text-xs text-gray-500 truncate" id="replyPreviewText">ข้อความ...</p>
+                </div>
+                <button onclick="cancelReply()" class="p-1 text-gray-400 hover:text-gray-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- ส่วนรูปภาพ -->
+            <div id="imagePreviewContainer" class="hidden flex justify-between items-start">
+                <div class="relative inline-block">
+                    <img id="imagePreview" src="" alt="preview" class="h-20 w-auto rounded-lg border border-gray-300 object-cover">
+                </div>
+                <button onclick="cancelImage()" class="p-1 bg-gray-100 rounded-full text-gray-500 hover:text-red-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Input Area (แก้ให้ชิดด้านล่างเสมอ) -->
+        <footer class="bg-white p-3 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-30 mt-auto sticky bottom-0 w-full">
+            <form id="messageForm" class="flex items-end gap-2 max-w-4xl mx-auto">
+                
+                <!-- ปุ่มแนบรูป -->
+                <button type="button" onclick="document.getElementById('imageInput').click()" class="p-3 text-gray-500 hover:text-blue-500 hover:bg-blue-50 rounded-full transition flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                </button>
+                <input type="file" id="imageInput" accept="image/*" class="hidden" onchange="handleImageSelect(event)">
+
+                <!-- ช่องพิมพ์ข้อความ -->
+                <div class="flex-1 bg-gray-100 rounded-2xl relative">
+                    <textarea id="messageInput" rows="1" placeholder="พิมพ์ข้อความ..." class="w-full bg-transparent px-4 py-3 focus:outline-none resize-none max-h-32 no-scrollbar" style="min-height: 48px;" oninput="autoResize(this)"></textarea>
+                </div>
+
+                <!-- ปุ่มส่ง -->
+                <button type="submit" id="sendBtn" class="p-3 bg-blue-600 text-white hover:bg-blue-700 rounded-full transition flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Modal ขยายรูปภาพ -->
+    <div id="imageModal" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center opacity-0 transition-opacity duration-300" onclick="closeImageModal()">
+        <button class="absolute top-4 right-4 text-white hover:text-gray-300 p-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        <img id="modalImage" src="" class="max-w-[95%] max-h-[95vh] object-contain rounded" onclick="event.stopPropagation()">
+    </div>
+
+    <!-- Modal แก้ไขชื่อ -->
+    <div id="editNameModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center opacity-0 transition-opacity duration-300 z-[60]">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm mx-4 transform scale-95 transition-transform duration-300" id="editNameBox">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">แก้ไขชื่อเล่น</h3>
+            <form id="editNameForm" class="space-y-4">
+                <input type="text" id="newUsernameInput" required maxlength="20" placeholder="ตั้งชื่อเล่นใหม่..." class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex justify-end gap-2 mt-4">
+                    <button type="button" onclick="closeEditNameModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition font-medium">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition font-medium">บันทึก</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal ยืนยันออกจากระบบ -->
+    <div id="logoutModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center opacity-0 transition-opacity duration-300 z-[60]">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm mx-4 transform scale-95 transition-transform duration-300" id="logoutBox">
+            <h3 class="text-lg font-bold text-gray-800 mb-2">ยืนยันการออกจากระบบ</h3>
+            <p class="text-gray-500 text-sm mb-6">ประวัติการแชทจะยังคงอยู่ในเครื่องนี้ คุณต้องการออกจากระบบใช่หรือไม่?</p>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeLogoutModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition font-medium">ยกเลิก</button>
+                <button onclick="confirmLogout()" class="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg transition font-medium">ออกจากระบบ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================= สถานะแอปพลิเคชัน =================
+        const APP_PREFIX = 'public_chat_';
+        const MAX_HISTORY = 100; // จำกัดจำนวนข้อความเพื่อไม่ให้ localStorage เต็ม
+        
+        let currentUser = localStorage.getItem(APP_PREFIX + 'username') || '';
+        let chatHistory = JSON.parse(localStorage.getItem(APP_PREFIX + 'history')) || [];
+        let replyingTo = null; // เก็บข้อมูลข้อความที่กำลังตอบกลับ
+        let pendingImageBase64 = null; // เก็บรูปที่เตรียมส่ง
+
+        // การสื่อสาร
+        let ws;
+        // ใช้ BroadcastChannel คู่กันเพื่อให้ทดสอบเปิด 2 แท็บในเครื่องได้แบบ 100% (เผื่อ WS สาธารณะหลุด)
+        const localBroadcast = new BroadcastChannel('local_chat_sync');
+
+        // ================= Elements =================
+        const loginView = document.getElementById('loginView');
+        const chatView = document.getElementById('chatView');
+        const loginForm = document.getElementById('loginForm');
+        const usernameInput = document.getElementById('usernameInput');
+        const displayUsername = document.getElementById('displayUsername');
+        const headerAvatar = document.getElementById('headerAvatar');
+        const messageContainer = document.getElementById('messageContainer');
+        const messageForm = document.getElementById('messageForm');
+        const messageInput = document.getElementById('messageInput');
+        
+        // Preview Area
+        const attachmentPreviewArea = document.getElementById('attachmentPreviewArea');
+        const replyPreview = document.getElementById('replyPreview');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        
+        // ================= เริ่มต้นการทำงาน =================
+        function init() {
+            if (currentUser) {
+                showChat();
+            } else {
+                showLogin();
+            }
+            setupWebSocket();
+            renderMessages();
+
+            // ฟังข้อความจากแท็บอื่น (BroadcastChannel)
+            localBroadcast.onmessage = (event) => {
+                const msg = event.data;
+                // ถ้าเป็นข้อความใหม่ที่ไม่มีในเครื่อง ให้เพิ่มและแสดง
+                if (!chatHistory.find(m => m.id === msg.id)) {
+                    saveMessage(msg);
+                    appendMessageUI(msg);
+                    scrollToBottom();
+                }
+            };
+        }
+
+        // ================= WebSocket Setup =================
+        function setupWebSocket() {
+            // ใช้เซิร์ฟเวอร์ WebSocket สาธารณะสำหรับเทส (echo/broadcast)
+            // หมายเหตุ: เซิร์ฟเวอร์สาธารณะบางตัวอาจทำงานไม่เสถียร BroadcastChannel จะช่วยสำรองการทดสอบแบบ Local
+            const wsUrl = 'wss://socketsbay.com/wss/v2/1/demo/'; 
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => console.log('Connected to WebSocket Server');
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.type === 'chat' && msg.appId === 'my_public_chat') {
+                            // ป้องกันการรับข้อความซ้ำของตัวเองที่ส่งไป
+                            if (!chatHistory.find(m => m.id === msg.id)) {
+                                saveMessage(msg);
+                                appendMessageUI(msg);
+                                scrollToBottom();
+                            }
+                        }
+                    } catch (e) {
+                        // ไม่ใช่ JSON ของแอปเรา ปล่อยผ่าน
+                    }
+                };
+
+                ws.onclose = () => {
+                    console.log('WebSocket disconnected. Retrying in 5s...');
+                    setTimeout(setupWebSocket, 5000);
+                };
+            } catch(e) {
+                console.error("WebSocket setup failed:", e);
+            }
+        }
+
+        // ================= การจัดการ User =================
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = usernameInput.value.trim();
+            if (name) {
+                currentUser = name;
+                localStorage.setItem(APP_PREFIX + 'username', currentUser);
+                showChat();
+            }
+        });
+
+        function showLogin() {
+            loginView.classList.remove('hidden');
+            chatView.classList.add('hidden');
+            usernameInput.focus();
+        }
+
+        function showChat() {
+            loginView.classList.add('hidden');
+            chatView.classList.remove('hidden');
+            displayUsername.textContent = currentUser;
+            headerAvatar.textContent = currentUser.charAt(0).toUpperCase();
+            scrollToBottom();
+        }
+
+        // ================= ระบบ Logout (Custom Modal) =================
+        function logout() {
+            const modal = document.getElementById('logoutModal');
+            const box = document.getElementById('logoutBox');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                box.classList.remove('scale-95');
+                box.classList.add('scale-100');
+            }, 10);
+        }
+
+        function closeLogoutModal() {
+            const modal = document.getElementById('logoutModal');
+            const box = document.getElementById('logoutBox');
+            modal.classList.add('opacity-0');
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function confirmLogout() {
+            currentUser = '';
+            localStorage.removeItem(APP_PREFIX + 'username');
+            closeLogoutModal();
+            showLogin();
+        }
+
+        // ================= ระบบ Edit Name (Custom Modal) =================
+        function editUsername() {
+            const modal = document.getElementById('editNameModal');
+            const box = document.getElementById('editNameBox');
+            const input = document.getElementById('newUsernameInput');
+            
+            input.value = currentUser;
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                box.classList.remove('scale-95');
+                box.classList.add('scale-100');
+                input.focus();
+            }, 10);
+        }
+
+        function closeEditNameModal() {
+            const modal = document.getElementById('editNameModal');
+            const box = document.getElementById('editNameBox');
+            modal.classList.add('opacity-0');
+            box.classList.remove('scale-100');
+            box.classList.add('scale-95');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        document.getElementById('editNameForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newName = document.getElementById('newUsernameInput').value.trim();
+            if (newName && newName !== '') {
+                currentUser = newName;
+                localStorage.setItem(APP_PREFIX + 'username', currentUser);
+                displayUsername.textContent = currentUser;
+                headerAvatar.textContent = currentUser.charAt(0).toUpperCase();
+                closeEditNameModal();
+            }
+        });
+
+        // ================= การจัดการ Input =================
+        function autoResize(textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = (textarea.scrollHeight < 120 ? textarea.scrollHeight : 120) + 'px';
+        }
+
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                messageForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // ================= การส่งข้อความ =================
+        messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = messageInput.value.trim();
+            
+            if (!text && !pendingImageBase64) return;
+
+            const newMessage = {
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                type: 'chat',
+                appId: 'my_public_chat',
+                sender: currentUser,
+                text: text,
+                image: pendingImageBase64,
+                replyTo: replyingTo,
+                timestamp: Date.now()
+            };
+
+            // 1. บันทึกและแสดงผลทันที
+            saveMessage(newMessage);
+            appendMessageUI(newMessage);
+            scrollToBottom();
+
+            // 2. กระจายผ่านระบบต่างๆ
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(newMessage));
+            }
+            localBroadcast.postMessage(newMessage); // กระจายให้แท็บอื่นที่เปิดอยู่
+
+            // 3. เคลียร์ฟอร์ม
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            cancelReply();
+            cancelImage();
+        });
+
+        // ================= การจัดการรูปภาพ (บีบอัด Base64) =================
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // บีบอัดรูปก่อนเพื่อให้ base64 ไม่ใหญ่เกินไปสำหรับการส่งผ่าน WS
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // กำหนดขนาดสูงสุด 800px
+                    const MAX_WIDTH = 800;
+                    const MAX_HEIGHT = 800;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // บีบอัดเป็น JPEG quality 0.6 (~50-100KB)
+                    pendingImageBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    
+                    // แสดง Preview
+                    imagePreview.src = pendingImageBase64;
+                    imagePreviewContainer.classList.remove('hidden');
+                    updatePreviewArea();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            event.target.value = ''; // รีเซ็ต input
+        }
+
+        function cancelImage() {
+            pendingImageBase64 = null;
+            imagePreviewContainer.classList.add('hidden');
+            updatePreviewArea();
+        }
+
+        // ================= การตอบกลับ =================
+        function initiateReply(id, sender, text, hasImage) {
+            replyingTo = { id, sender, text, hasImage };
+            
+            document.getElementById('replyPreviewName').textContent = `ตอบกลับ: ${sender}`;
+            let previewText = text;
+            if(!previewText && hasImage) previewText = '[รูปภาพ]';
+            document.getElementById('replyPreviewText').textContent = previewText;
+            
+            replyPreview.classList.remove('hidden');
+            updatePreviewArea();
+            messageInput.focus();
+        }
+
+        function cancelReply() {
+            replyingTo = null;
+            replyPreview.classList.add('hidden');
+            updatePreviewArea();
+        }
+
+        function updatePreviewArea() {
+            if (!replyingTo && !pendingImageBase64) {
+                attachmentPreviewArea.classList.add('hidden');
+            } else {
+                attachmentPreviewArea.classList.remove('hidden');
+                attachmentPreviewArea.classList.add('flex');
+            }
+        }
+
+        // ================= การเก็บประวัติ (LocalStorage) =================
+        function saveMessage(msg) {
+            chatHistory.push(msg);
+            // จำกัดจำนวนข้อความ
+            if (chatHistory.length > MAX_HISTORY) {
+                chatHistory = chatHistory.slice(chatHistory.length - MAX_HISTORY);
+            }
+            try {
+                localStorage.setItem(APP_PREFIX + 'history', JSON.stringify(chatHistory));
+            } catch (e) {
+                console.warn('Storage full, clearing oldest messages...');
+                chatHistory = chatHistory.slice(chatHistory.length - (MAX_HISTORY/2)); // หั่นครึ่งถ้าเต็ม
+                localStorage.setItem(APP_PREFIX + 'history', JSON.stringify(chatHistory));
+            }
+        }
+
+        // ================= การแสดงผล =================
+        function formatTime(timestamp) {
+            const d = new Date(timestamp);
+            return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) + ' น.';
+        }
+
+        function renderMessages() {
+            messageContainer.innerHTML = '';
+            chatHistory.forEach(msg => appendMessageUI(msg, false));
+            setTimeout(scrollToBottom, 100);
+        }
+
+        function appendMessageUI(msg, smoothScroll = true) {
+            const isSelf = msg.sender === currentUser;
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = `flex w-full mb-4 ${isSelf ? 'justify-end' : 'justify-start'}`;
+
+            // โครงสร้างกล่องข้อความ
+            let html = '';
+            
+            // Avatar คนอื่น
+            if (!isSelf) {
+                html += `<div class="w-8 h-8 rounded-full bg-gray-300 flex-shrink-0 flex items-center justify-center text-sm font-bold text-white mr-2 mt-auto shadow-sm">${msg.sender.charAt(0).toUpperCase()}</div>`;
+            }
+
+            // เนื้อหากล่อง
+            html += `<div class="relative group max-w-[75%] md:max-w-[60%] flex flex-col items-${isSelf ? 'end' : 'start'}">`;
+            
+            // ชื่อคนส่ง (เฉพาะคนอื่น)
+            if (!isSelf) {
+                html += `<span class="text-xs text-gray-500 mb-1 ml-1">${msg.sender}</span>`;
+            }
+
+            // สีกล่อง
+            const bgClass = isSelf ? 'bg-blue-600 text-white' : 'bg-white text-gray-800';
+            const radiusClass = isSelf ? 'rounded-2xl rounded-tr-sm' : 'rounded-2xl rounded-tl-sm';
+            
+            html += `<div class="${bgClass} ${radiusClass} p-3 shadow-md w-full relative">`;
+
+            // กล่อง Reply (ถ้ามี)
+            if (msg.replyTo) {
+                const replyBg = isSelf ? 'bg-blue-700/50 border-blue-300' : 'bg-gray-100 border-gray-300';
+                const replyTextCol = isSelf ? 'text-blue-100' : 'text-gray-500';
+                html += `
+                <div class="${replyBg} border-l-4 p-2 rounded mb-2 cursor-pointer hover:opacity-80 transition" 
+                     onclick="scrollToMessage('${msg.replyTo.id}')">
+                    <div class="text-[10px] font-bold mb-0.5">@${msg.replyTo.sender}</div>
+                    <div class="text-xs truncate ${replyTextCol}">${msg.replyTo.text || '[รูปภาพ]'}</div>
+                </div>`;
+            }
+
+            // รูปภาพ
+            if (msg.image) {
+                html += `<img src="${msg.image}" class="chat-image rounded-lg mb-2 max-w-full bg-black/10" onclick="openImageModal('${msg.image}')" alt="รูปภาพแนบ">`;
+            }
+
+            // ข้อความ
+            if (msg.text) {
+                html += `<p class="whitespace-pre-wrap break-words text-sm md:text-base leading-relaxed">${linkify(msg.text, isSelf)}</p>`;
+            }
+
+            // พื้นที่สำหรับแสดง Link Preview
+            html += `<div id="preview-${msg.id}" class="w-full empty:hidden mt-1">`;
+            if (msg.preview) {
+                html += renderPreviewHTML(msg.preview, isSelf);
+            }
+            html += `</div>`;
+
+            // เวลา
+            const timeCol = isSelf ? 'text-blue-200' : 'text-gray-400';
+            html += `<div class="text-[10px] ${timeCol} text-right mt-1.5 flex justify-end items-center gap-1">`;
+            if (isSelf) {
+                // ไอคอนติ๊กถูก (สถานะส่งแล้ว)
+                html += `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+            }
+            html += `${formatTime(msg.timestamp)}</div>`;
+
+            // ปุ่ม Reply (โผล่ตอน hover)
+            const replyBtnPos = isSelf ? 'right-full mr-2' : 'left-full ml-2';
+            const escapedText = msg.text ? msg.text.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
+            html += `</div>
+                <button onclick="initiateReply('${msg.id}', '${msg.sender}', '${escapedText}', ${!!msg.image})" 
+                        class="absolute top-1/2 -translate-y-1/2 ${replyBtnPos} p-2 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                </button>
+            `;
+
+            html += `</div>`;
+            bubbleDiv.innerHTML = html;
+            bubbleDiv.id = `msg-${msg.id}`;
+            messageContainer.appendChild(bubbleDiv);
+
+            // ตรวจสอบและดึงข้อมูลลิ้งก์ถ้ามี
+            if (msg.text && !msg.preview && !msg.previewAttempted) {
+                fetchAndRenderPreview(msg);
+            }
+
+            if (smoothScroll) {
+                scrollToBottom(true);
+            }
+        }
+
+        // ================= ระบบจัดการข้อความและ Link Preview =================
+        function linkify(text, isSelf) {
+            // ป้องกัน XSS
+            const safeText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            // ค้นหาและแปลง URL เป็นแท็ก <a>
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const linkColor = isSelf ? 'text-blue-200 hover:text-white' : 'text-blue-500 hover:text-blue-700';
+            return safeText.replace(urlRegex, function(url) {
+                return `<a href="${url}" target="_blank" class="underline ${linkColor} break-all">${url}</a>`;
+            });
+        }
+
+        async function fetchAndRenderPreview(msg) {
+            const urlRegex = /(https?:\/\/[^\s]+)/;
+            const match = msg.text.match(urlRegex);
+            if (!match) return; // ไม่มีลิ้งก์ในข้อความ
+            
+            const url = match[0];
+            msg.previewAttempted = true; 
+            updateMessageInHistory(msg);
+
+            // ตรวจสอบว่าเป็นลิ้งก์ YouTube หรือไม่
+            const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const ytMatch = url.match(ytRegExp);
+            
+            let previewData = null;
+
+            if (ytMatch && ytMatch[2].length === 11) {
+                previewData = {
+                    type: 'youtube',
+                    url: url,
+                    videoId: ytMatch[2]
+                };
+            } else {
+                // ดึงข้อมูล OpenGraph จากเว็บไซต์ทั่วไปผ่าน AllOrigins Proxy
+                try {
+                    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+                    const response = await fetch(proxyUrl);
+                    const data = await response.json();
+                    
+                    if (data.contents) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(data.contents, "text/html");
+
+                        const getMeta = (property) => {
+                            const tag = doc.querySelector(`meta[property="${property}"], meta[name="${property}"]`);
+                            return tag ? tag.getAttribute("content") : null;
+                        };
+
+                        const title = getMeta("og:title") || doc.title;
+                        const description = getMeta("og:description") || getMeta("description") || "";
+                        const image = getMeta("og:image");
+
+                        if (title) {
+                            previewData = {
+                                type: 'link',
+                                url: url,
+                                title: title,
+                                description: description,
+                                image: image
+                            };
+                        }
+                    }
+                } catch (e) {
+                    console.log('โหลดตัวอย่างลิ้งก์ไม่สำเร็จ:', url);
+                }
+            }
+
+            // ถ้าได้ข้อมูลพรีวิวมา ให้บันทึกและอัปเดตหน้าจอ
+            if (previewData) {
+                msg.preview = previewData;
+                updateMessageInHistory(msg);
+                
+                const previewContainer = document.getElementById(`preview-${msg.id}`);
+                if (previewContainer) {
+                    const isSelf = msg.sender === currentUser;
+                    previewContainer.innerHTML = renderPreviewHTML(previewData, isSelf);
+                    scrollToBottom(true);
+                }
+            }
+        }
+
+        function renderPreviewHTML(preview, isSelf) {
+            if (!preview) return '';
+            
+            if (preview.type === 'youtube') {
+                return `
+                    <div class="mt-2 rounded-lg overflow-hidden bg-black aspect-video relative w-full shadow-sm border ${isSelf ? 'border-blue-400/30' : 'border-gray-200'}">
+                        <iframe width="100%" height="100%" src="https://www.youtube.com/embed/${preview.videoId}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="absolute top-0 left-0 w-full h-full"></iframe>
+                    </div>
+                `;
+            } else if (preview.type === 'link') {
+                const cardBg = isSelf ? 'bg-blue-700/40 hover:bg-blue-700/60 border-blue-400/30' : 'bg-gray-50 hover:bg-gray-100 border-gray-200';
+                const titleCol = isSelf ? 'text-white' : 'text-gray-800';
+                const descCol = isSelf ? 'text-blue-100' : 'text-gray-500';
+
+                return `
+                    <a href="${preview.url}" target="_blank" class="block mt-2 border rounded-lg overflow-hidden transition no-underline shadow-sm ${cardBg}">
+                        ${preview.image ? `<img src="${preview.image}" class="w-full h-32 md:h-40 object-cover border-b ${isSelf ? 'border-blue-400/30' : 'border-gray-200'}" alt="Link Preview Image">` : ''}
+                        <div class="p-3">
+                            <h4 class="font-bold text-sm truncate ${titleCol}">${preview.title}</h4>
+                            ${preview.description ? `<p class="text-[11px] md:text-xs line-clamp-2 mt-1 leading-snug ${descCol}">${preview.description}</p>` : ''}
+                            <p class="text-[10px] mt-1.5 truncate opacity-70 flex items-center gap-1 ${descCol}">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                                ${new URL(preview.url).hostname}
+                            </p>
+                        </div>
+                    </a>
+                `;
+            }
+            return '';
+        }
+
+        function updateMessageInHistory(msg) {
+            const index = chatHistory.findIndex(m => m.id === msg.id);
+            if (index !== -1) {
+                chatHistory[index] = msg;
+                try {
+                    localStorage.setItem(APP_PREFIX + 'history', JSON.stringify(chatHistory));
+                } catch(e) {}
+            }
+        }
+
+        function scrollToBottom(smooth = false) {
+            messageContainer.scrollTo({
+                top: messageContainer.scrollHeight,
+                behavior: smooth ? 'smooth' : 'auto'
+            });
+        }
+
+        function scrollToMessage(id) {
+            const el = document.getElementById(`msg-${id}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // ไฮไลต์ให้เห็นชัดเจน
+                const box = el.querySelector('div > div'); // เลือกกล่องสี
+                const originalBg = box.className;
+                box.classList.add('ring-4', 'ring-yellow-400', 'transition-all', 'duration-300');
+                setTimeout(() => {
+                    box.classList.remove('ring-4', 'ring-yellow-400');
+                }, 1500);
+            }
+        }
+
+        // ================= Modal ดูรูปภาพขนาดเต็ม =================
+        const imageModal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+
+        function openImageModal(src) {
+            modalImage.src = src;
+            imageModal.classList.remove('hidden');
+            // ทำเป็นเฟดอิน
+            setTimeout(() => {
+                imageModal.classList.remove('opacity-0');
+            }, 10);
+        }
+
+        function closeImageModal() {
+            imageModal.classList.add('opacity-0');
+            setTimeout(() => {
+                imageModal.classList.add('hidden');
+                modalImage.src = '';
+            }, 300);
+        }
+
+        // เริ่มแอป
+        init();
+    </script>
+</body>
+</html>
