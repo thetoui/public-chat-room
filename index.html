@@ -208,9 +208,7 @@
 
         // ================= WebSocket Setup =================
         function setupWebSocket() {
-            // ใช้เซิร์ฟเวอร์ WebSocket สาธารณะสำหรับเทส (echo/broadcast)
-            // หมายเหตุ: เซิร์ฟเวอร์สาธารณะบางตัวอาจทำงานไม่เสถียร BroadcastChannel จะช่วยสำรองการทดสอบแบบ Local
-            const wsUrl = 'wss://socketsbay.com/wss/v2/1/demo/'; 
+            const wsUrl = 'wss://echo.websocket.org'; 
             
             try {
                 ws = new WebSocket(wsUrl);
